@@ -20,9 +20,9 @@ public static func paginationSystem<PageDependency: Hashable, Element>(
 * Simple state machine to represent pagination use cases.
 * Reusable pagination logic. No need to duplicate state across different screens with paginated apis.
 * Observe `PaginationState` to react to:
-    ** loading page events
-    ** latest api error
-    ** changes on the list of elements
+    * loading page events
+    * latest api error
+    * changes on the list of elements
 
 # Examples
 
