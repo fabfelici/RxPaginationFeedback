@@ -12,11 +12,11 @@ Pod::Spec.new do |s|
   DESC
   s.homepage     = "https://github.com/fabfelici/RxPaginationFeedback"
   s.license      = { :type => "MIT", :file => "LICENSE" }
-  s.author             = { "Fabio Felici" => "fab.felici@gmail.com" }
+  s.author       = { "Fabio Felici" => "fab.felici@gmail.com" }
   s.source       = { :git => "https://github.com/fabfelici/RxPaginationFeedback.git", :tag => s.version.to_s }
   s.source_files  = "Sources/**/*.swift"
   s.frameworks  = "Foundation"
   s.swift_version = '5.0'
-
+  s.ios.deployment_target = "8.0"
   s.dependency 'RxFeedback', '~> 3.0'
 end
