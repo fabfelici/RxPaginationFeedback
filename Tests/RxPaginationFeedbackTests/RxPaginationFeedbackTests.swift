@@ -2,6 +2,7 @@ import XCTest
 import RxFeedback
 import RxTest
 import RxSwift
+import RxCocoa
 import RxPaginationFeedback
 
 class RxPaginationFeedbackTests: XCTestCase {
@@ -27,7 +28,7 @@ class RxPaginationFeedbackTests: XCTestCase {
 
         let state: Observable<PaginationState<Int, Int>> = Observable.paginationSystem(
             scheduler: scheduler,
-            pageProvider: SimplePageProvider(pageSize: 5, scheduler: scheduler).getPage,
+            pageProvider: SimplePageProvider(pageSize: 5).getPage,
             userEvents: userEvents
         )
 
@@ -59,18 +60,25 @@ class RxPaginationFeedbackTests: XCTestCase {
             .next(2, .loadNext)
         ]).asObservable()
 
-
         let stateObs = scheduler.createObserver(PaginationState<Int, Int>.self)
+        let errorObs = scheduler.createObserver(String.self)
 
-        Observable.paginationSystem(
+        let state = Observable.paginationSystem(
             scheduler: scheduler,
             pageProvider: { _ -> Observable<PageResponse<Int, Int>> in
                 return .error(String.outOfBounds)
             },
             userEvents: userEvents
         )
-        .subscribe(stateObs)
-        .disposed(by: disposeBag)
+
+        state
+            .subscribe(stateObs)
+            .disposed(by: disposeBag)
+
+        state
+            .compactMap { $0.error as? String }
+            .subscribe(errorObs)
+            .disposed(by: disposeBag)
 
         scheduler.start()
 
@@ -81,6 +89,13 @@ class RxPaginationFeedbackTests: XCTestCase {
                 .next(1, .loaded(dependency: 0, elements: [], error: String.outOfBounds)),
                 .next(2, .loading(dependency: 0, elements: [])),
                 .next(2, .loaded(dependency: 0, elements: [], error: String.outOfBounds))
+            ]
+        )
+
+        XCTAssertEqual(
+            errorObs.events, [
+                .next(1, String.outOfBounds),
+                .next(2, String.outOfBounds)
             ]
         )
     }
@@ -187,6 +202,47 @@ class RxPaginationFeedbackTests: XCTestCase {
             ]
         )
     }
+
+    func testSimplePaginationUsingDriver() {
+        SharingScheduler.mock(scheduler: scheduler, action: _testSimplePaginationUsingDriver)
+    }
+
+    func _testSimplePaginationUsingDriver() {
+        let userEvents: Driver<PaginationState<Int, Int>.UserEvent> = scheduler.createHotObservable([
+            .next(1, .dependency(0)),
+            .next(2, .loadNext),
+            .next(3, .loadNext),
+            .next(4, .dependency(0))
+        ]).asSharedSequence(onErrorDriveWith: .empty())
+
+        let stateObs = scheduler.createObserver(PaginationState<Int, Int>.self)
+
+        let state: Driver<PaginationState<Int, Int>> = Driver.paginationSystem(
+            pageProvider: SimplePageProvider(pageSize: 5).getPage,
+            userEvents: userEvents
+        )
+
+        state
+            .drive(stateObs)
+            .disposed(by: disposeBag)
+
+        scheduler.start()
+
+        XCTAssertEqual(
+            stateObs.events, [
+                .next(0, .loading(dependency: nil, elements: [])),
+                .next(1, .loading(dependency: 0, elements: [])),
+                .next(1, .loaded(dependency: 5, elements: [1, 2, 3, 4, 5], error: nil)),
+                .next(2, .loading(dependency: 5, elements: [1, 2, 3, 4, 5])),
+                .next(2, .loaded(dependency: 10, elements: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], error: nil)),
+                .next(3, .loading(dependency: 10, elements: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])),
+                .next(3, .loaded(dependency: 15, elements: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], error: nil)),
+                .next(4, .loading(dependency: 0, elements: [])),
+                .next(4, .loaded(dependency: 5, elements: [1, 2, 3, 4, 5], error: nil))
+            ]
+        )
+    }
+    
 }
 
 extension String: Error {
@@ -197,11 +253,9 @@ class SimplePageProvider {
 
     let data = (1..<1000).map { $0 }
     let pageSize: Int
-    let scheduler: SchedulerType
 
-    init(pageSize: Int, scheduler: SchedulerType) {
+    init(pageSize: Int) {
         self.pageSize = pageSize
-        self.scheduler = scheduler
     }
 
     func getPage(accumulatedCount: Int) -> Observable<PageResponse<Int, Int>> {
