@@ -91,8 +91,9 @@ public enum PaginationState<PageDependency, Element> {
     private static func reduceLoaded(state: PaginationState, event: Event) -> PaginationState {
         switch event {
         case .user(.loadNext):
-            if state.dependency == nil { return state }
-            return .loading(dependency: state.dependency, elements: state.elements)
+            return state.dependency.map {
+                .loading(dependency: $0, elements: state.elements)
+            } ?? state
         case let .user(.dependency(dependency)):
             return .loading(dependency: dependency, elements: [])
         case .pageProvider:

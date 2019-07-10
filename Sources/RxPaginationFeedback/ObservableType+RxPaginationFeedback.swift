@@ -39,7 +39,7 @@ extension SharedSequenceConvertibleType where Element == Any, SharingStrategy ==
 
     public static func paginationSystem<PageDependency: Hashable, Element>(
         pageProvider: @escaping PageProvider<PageDependency, Element>,
-        userEvents: Observable<PaginationState<PageDependency, Element>.UserEvent>
+        userEvents: Driver<PaginationState<PageDependency, Element>.UserEvent>
     ) -> Driver<PaginationState<PageDependency, Element>> {
         return system(
             initialState: .loading(dependency: nil, elements: []),
@@ -50,11 +50,9 @@ extension SharedSequenceConvertibleType where Element == Any, SharingStrategy ==
                     paginationEffect(pageProvider)($0)
                         .asSignal(onErrorSignalWith: .empty())
                 }
-            )
-            ,
+            ),
             { _ in
                 userEvents.map { .user($0) }
-                    .observeOn(MainScheduler.asyncInstance)
                     .asSignal(onErrorSignalWith: .empty())
             }
         )
