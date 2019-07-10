@@ -5,5 +5,8 @@ xcode_project: RxPaginationFeedback.xcodeproj
 xcode_scheme: RxPaginationFeedback
 xcode_destination: platform=iOS Simulator,OS=11.4,name=iPhone X
 
+before_install:
+  - swift build
+
 after_success:
-    - bash <(curl -s https://codecov.io/bash)
+  - bash <(curl -s https://codecov.io/bash)
