@@ -28,8 +28,8 @@ class RxPaginationFeedbackTests: XCTestCase {
 
         let state: Observable<PaginationState<Int, Int>> = Observable.paginationSystem(
             scheduler: scheduler,
-            pageProvider: SimplePageProvider(pageSize: 5).getPage,
-            userEvents: userEvents
+            userEvents: userEvents,
+            pageProvider: SimplePageProvider(pageSize: 5).getPage
         )
 
         state
@@ -65,11 +65,10 @@ class RxPaginationFeedbackTests: XCTestCase {
 
         let state = Observable.paginationSystem(
             scheduler: scheduler,
-            pageProvider: { _ -> Observable<PageResponse<Int, Int>> in
-                return .error(String.outOfBounds)
-            },
             userEvents: userEvents
-        )
+        ) { _ -> Observable<PageResponse<Int, Int>> in
+            return .error(String.outOfBounds)
+        }
 
         state
             .subscribe(stateObs)
@@ -106,12 +105,11 @@ class RxPaginationFeedbackTests: XCTestCase {
 
         let state: Observable<PaginationState<Int, Int>> =  Observable.paginationSystem(
             scheduler: scheduler,
-            pageProvider: { _ -> Observable<PageResponse<Int, Int>> in
-                XCTFail("Should not be called")
-                return .empty()
-            },
             userEvents: .empty()
-        )
+        ) { _ -> Observable<PageResponse<Int, Int>> in
+            XCTFail("Should not be called")
+            return .empty()
+        }
 
         state
             .subscribe(stateObs)
@@ -141,11 +139,10 @@ class RxPaginationFeedbackTests: XCTestCase {
         ]
         let state: Observable<PaginationState<String, Int>> =  Observable.paginationSystem(
             scheduler: scheduler,
-            pageProvider: { dependency -> Observable<PageResponse<String, Int>> in
-                .just(.init(dependency: "page2", elements: data[dependency, default: []]))
-            },
             userEvents: userEvents
-        )
+        ) { dependency -> Observable<PageResponse<String, Int>> in
+            .just(.init(dependency: "page2", elements: data[dependency, default: []]))
+        }
 
         state
             .subscribe(stateObs)
@@ -180,12 +177,11 @@ class RxPaginationFeedbackTests: XCTestCase {
         ]
         let state: Observable<PaginationState<String, Int>> =  Observable.paginationSystem(
             scheduler: scheduler,
-            pageProvider: { dependency -> Observable<PageResponse<String, Int>> in
-                Observable.just(PageResponse.init(dependency: nil, elements: data[dependency, default: []]))
-                    .delay(.seconds(2), scheduler: self.scheduler)
-            },
             userEvents: userEvents
-        )
+        ) { dependency -> Observable<PageResponse<String, Int>> in
+            Observable.just(PageResponse.init(dependency: nil, elements: data[dependency, default: []]))
+                .delay(.seconds(2), scheduler: self.scheduler)
+        }
 
         state
             .subscribe(stateObs)
@@ -218,8 +214,8 @@ class RxPaginationFeedbackTests: XCTestCase {
         let stateObs = scheduler.createObserver(PaginationState<Int, Int>.self)
 
         let state: Driver<PaginationState<Int, Int>> = Driver.paginationSystem(
-            pageProvider: SimplePageProvider(pageSize: 5).getPage,
-            userEvents: userEvents
+            userEvents: userEvents,
+            pageProvider: SimplePageProvider(pageSize: 5).getPage
         )
 
         state

@@ -33,25 +33,6 @@ struct Github: PaginatedAPI {
     ) -> Observable<(Bool, [PaginationResult], Error?)> {
         return Observable.paginationSystem(
             scheduler: SerialDispatchQueueScheduler(qos: .userInteractive),
-            pageProvider: { dependency -> Observable<PageResponse<String, GHRepo>> in
-                return URL(string: dependency)
-                    .map { URLRequest(url: $0) }
-                    .map(URLSession.shared.rx.response)?
-                    .compactMap { args in
-                        let (httpResponse, data) = args
-                        guard 200 ..< 300 ~= httpResponse.statusCode else {
-                            throw RxCocoaURLError.httpRequestFailed(response: httpResponse, data: data)
-                        }
-
-                        let decoder = JSONDecoder()
-                        let response = try? decoder.decode(GHResponse.self, from: data)
-                        let linksHeader = httpResponse.allHeaderFields["Link"] as? String
-                        let links = try linksHeader.map(parseLinks) ?? [:]
-
-                        return response
-                            .map { PageResponse(dependency: links["next"], elements: $0.items) }
-                    } ?? .just(PageResponse(dependency: nil, elements: []))
-            },
             userEvents: Observable.merge(
                 loadNext.map { _ in .loadNext },
                 Observable.merge(
@@ -65,16 +46,32 @@ struct Github: PaginatedAPI {
                 }
                 .map { .dependency($0) }
             )
-        ).map {
-            ($0.isLoading,
-             $0.elements.map {
+        ) { dependency -> Observable<PageResponse<String, GHRepo>> in
+            return URL(string: dependency)
+                .map { URLRequest(url: $0) }
+                .map(URLSession.shared.rx.response)?
+                .compactMap { args in
+                    let (httpResponse, data) = args
+                    guard 200 ..< 300 ~= httpResponse.statusCode else {
+                        throw RxCocoaURLError.httpRequestFailed(response: httpResponse, data: data)
+                    }
+
+                    let decoder = JSONDecoder()
+                    let response = try? decoder.decode(GHResponse.self, from: data)
+                    let linksHeader = httpResponse.allHeaderFields["Link"] as? String
+                    let links = try linksHeader.map(parseLinks) ?? [:]
+
+                    return response
+                        .map { PageResponse(dependency: links["next"], elements: $0.items) }
+                } ?? .just(PageResponse(dependency: nil, elements: []))
+        }
+        .map {
+            ($0.isLoading, $0.elements.map {
                 PaginationResult(
                     title: $0.name,
                     subtitle: $0.url.absoluteString
                 )
-            },
-             $0.error
-            )
+            }, $0.error)
         }
     }
 }

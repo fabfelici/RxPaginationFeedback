@@ -12,8 +12,8 @@ public typealias PageProvider<PageDependency, Element> = (PageDependency) -> Obs
 
 public static func paginationSystem<PageDependency: Hashable, Element>(
     scheduler: ImmediateSchedulerType,
-    pageProvider: @escaping PageProvider<PageDependency, Element>,
-    userEvents: Observable<PaginationState<PageDependency, Element>.UserEvent>
+    userEvents: Observable<PaginationState<PageDependency, Element>.UserEvent>,
+    pageProvider: @escaping PageProvider<PageDependency, Element>
 ) -> Observable<PaginationState<PageDependency, Element>>
 ```
 
@@ -41,25 +41,24 @@ struct User: Decodable {
 
 let reqresState = Observable.paginationSystem(
     scheduler: SerialDispatchQueueScheduler(qos: .userInteractive),
-    pageProvider: { dependency -> Observable<PageResponse<Int, User>> in
-
-        let offsetModulo = ((dependency / 3) % 4) + 1
-        let urlRequest = URLRequest(url: URL(string: "https://reqres.in/api/users?page=\(offsetModulo)")!)
-
-        return URLSession.shared.rx.data(request: urlRequest)
-            .compactMap {
-                let decoder = JSONDecoder()
-                decoder.keyDecodingStrategy = .convertFromSnakeCase
-                return (try? decoder.decode(ReqresResponse.self, from: $0).data)
-                    .map {
-                        let newOffset = dependency + $0.count
-                        return PageResponse(dependency: newOffset, elements: $0)
-                    }
-            }
-    },
     userEvents: loadNext.map { .loadNext }
         .startWith(.dependency(0))
-)
+) { dependency -> Observable<PageResponse<Int, User>> in
+
+    let offsetModulo = ((dependency / 3) % 4) + 1
+    let urlRequest = URLRequest(url: URL(string: "https://reqres.in/api/users?page=\(offsetModulo)")!)
+
+    return URLSession.shared.rx.data(request: urlRequest)
+        .compactMap {
+            let decoder = JSONDecoder()
+            decoder.keyDecodingStrategy = .convertFromSnakeCase
+            return (try? decoder.decode(ReqresResponse.self, from: $0).data)
+                .map {
+                    let newOffset = dependency + $0.count
+                    return PageResponse(dependency: newOffset, elements: $0)
+                }
+        }
+}
 ```
 
 [More examples](https://github.com/fabfelici/RxPaginationFeedback/blob/master/Examples/Examples)

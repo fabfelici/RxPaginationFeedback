@@ -15,8 +15,8 @@ extension ObservableType where Element == Any {
 
     public static func paginationSystem<PageDependency: Hashable, Element>(
         scheduler: ImmediateSchedulerType,
-        pageProvider: @escaping PageProvider<PageDependency, Element>,
-        userEvents: Observable<PaginationState<PageDependency, Element>.UserEvent>
+        userEvents: Observable<PaginationState<PageDependency, Element>.UserEvent>,
+        pageProvider: @escaping PageProvider<PageDependency, Element>
     ) -> Observable<PaginationState<PageDependency, Element>> {
         return system(
             initialState: .loading(dependency: nil, elements: []),
@@ -38,8 +38,8 @@ extension ObservableType where Element == Any {
 extension SharedSequenceConvertibleType where Element == Any, SharingStrategy == DriverSharingStrategy {
 
     public static func paginationSystem<PageDependency: Hashable, Element>(
-        pageProvider: @escaping PageProvider<PageDependency, Element>,
-        userEvents: Driver<PaginationState<PageDependency, Element>.UserEvent>
+        userEvents: Driver<PaginationState<PageDependency, Element>.UserEvent>,
+        pageProvider: @escaping PageProvider<PageDependency, Element>
     ) -> Driver<PaginationState<PageDependency, Element>> {
         return system(
             initialState: .loading(dependency: nil, elements: []),

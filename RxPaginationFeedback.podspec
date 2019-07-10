@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name         = "RxPaginationFeedback"
-  s.version      = "1.0.0"
+  s.version      = "1.0.1"
   s.summary      = "Generic RxSwift operator to easily interact with paginated APIs."
   s.description  = <<-DESC
     * Simple state machine to represent pagination use cases.
