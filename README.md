@@ -62,3 +62,5 @@ let reqresState = Observable.paginationSystem(
 ```
 
 [More examples](https://github.com/fabfelici/RxPaginationFeedback/blob/master/Examples/Examples)
+
+<img src="Images/examples.gif" width="350"/>
