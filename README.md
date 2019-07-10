@@ -1,5 +1,5 @@
 # RxPaginationFeedback
-![pod](https://img.shields.io/cocoapods/v/RxPaginationFeedback.svg) [![Swift Package Manager compatible](https://img.shields.io/badge/Swift%20Package%20Manager-compatible-brightgreen.svg)](https://github.com/apple/swift-package-manager)
+![pod](https://img.shields.io/cocoapods/v/RxPaginationFeedback.svg) [![Swift Package Manager compatible](https://img.shields.io/badge/Swift%20Package%20Manager-compatible-brightgreen.svg)](https://github.com/apple/swift-package-manager) [![codecov](https://codecov.io/gh/fabfelici/RxPaginationFeedback/branch/master/graph/badge.svg)](https://codecov.io/gh/fabfelici/RxPaginationFeedback)
 
 Generic RxSwift operator to easily interact with paginated APIs. Based on [RxFeedback](https://github.com/NoTests/RxFeedback.swift).
 
