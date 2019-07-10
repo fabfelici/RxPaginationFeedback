@@ -39,14 +39,13 @@ struct User: Decodable {
     let lastName: String
 }
 
-let reqresState = Observable.paginationSystem(
-    scheduler: SerialDispatchQueueScheduler(qos: .userInteractive),
+let state = Driver.paginationSystem(
     userEvents: loadNext.map { .loadNext }
         .startWith(.dependency(0))
 ) { dependency -> Observable<PageResponse<Int, User>> in
 
-    let offsetModulo = ((dependency / 3) % 4) + 1
-    let urlRequest = URLRequest(url: URL(string: "https://reqres.in/api/users?page=\(offsetModulo)")!)
+    let page = ((dependency / 3) % 4) + 1
+    let urlRequest = URLRequest(url: URL(string: "https://reqres.in/api/users?page=\(page)")!)
 
     return URLSession.shared.rx.data(request: urlRequest)
         .compactMap {
@@ -54,11 +53,17 @@ let reqresState = Observable.paginationSystem(
             decoder.keyDecodingStrategy = .convertFromSnakeCase
             return (try? decoder.decode(ReqresResponse.self, from: $0).data)
                 .map {
-                    let newOffset = dependency + $0.count
-                    return PageResponse(dependency: newOffset, elements: $0)
+                    PageResponse(dependency: dependency + $0.count, elements: $0)
                 }
         }
 }
+
+state.
+    .map { $0.elements }
+    .drive(tableView.rx.items(cellIdentifier: "Cell", cellType: UITableViewCell.self)) { index, item, cell in
+        cell.textLabel?.text = "\(item.firstName) - \(item.lastName)"
+    }
+    .disposed(by: disposeBag)
 ```
 
 [More examples](https://github.com/fabfelici/RxPaginationFeedback/blob/master/Examples/Examples)
