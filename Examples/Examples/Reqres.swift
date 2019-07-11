@@ -18,7 +18,7 @@ struct User: Decodable {
     let lastName: String
 }
 
-struct ReqresDependency: Hashable {
+struct ReqresDependency: Equatable {
     let offset: Int
     let limit: Int
 }

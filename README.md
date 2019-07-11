@@ -8,7 +8,7 @@ Generic RxSwift operator to easily interact with paginated APIs. Based on [RxFee
 ![](Images/state_diagram.png)
 
 ```swift
-public typealias PageProvider<PageDependency, Element> = (PageDependency) -> Observable<PageResponse<PageDependency, Element>>
+public typealias PageProvider<PageDependency, Element> = (PageDependency) -> Observable<Page<PageDependency, Element>>
 
 public static func paginationSystem<PageDependency: Equatable, Element>(
     scheduler: ImmediateSchedulerType,
@@ -54,7 +54,7 @@ let state = Driver.paginationSystem(
             decoder.keyDecodingStrategy = .convertFromSnakeCase
             return (try? decoder.decode(ReqresResponse.self, from: $0).data)
                 .map {
-                    PageResponse(dependency: dependency + $0.count, elements: $0)
+                    Page(nextDependency: dependency + $0.count, elements: $0)
                 }
         }
 }

@@ -9,7 +9,7 @@
 import RxSwift
 import RxPaginationFeedback
 
-struct MovieDependency: Hashable {
+struct MovieDependency: Equatable {
     let page: Int
     let totalPages: Int
 
