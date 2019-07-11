@@ -15,35 +15,14 @@
 
 public enum PaginationState<PageDependency, Element> {
 
-    /**
-         The User events consumed by the pagination system.
-         - loadNext: Transitions the state machine to loading state.
-         - dependency: Transitions the state machine to loading state refreshing all the elements.
-         */
-
-    public enum UserEvent {
+    enum Event {
         case loadNext
-        case dependency(PageDependency)
-    }
-
-    /**
-         Internal events consumed by the pagination system.
-         - response: Sent when a page is fetched.
-         - error: Sent when an error occurred while fetching a page.
-         */
-
-    enum PageProviderEvent {
-        case response(PageResponse<PageDependency, Element>)
+        case page(Page<PageDependency, Element>)
         case error(Error)
     }
 
-    enum Event {
-        case user(UserEvent)
-        case pageProvider(PageProviderEvent)
-    }
-
-    case loading(dependency: PageDependency?, elements: [Element])
-    case loaded(dependency: PageDependency?, elements: [Element], error: Error?)
+    case loading(nextDependency: PageDependency?, elements: [Element])
+    case loaded(nextDependency: PageDependency?, elements: [Element], error: Error?)
 
     public var elements: [Element] {
         switch self {
@@ -71,12 +50,16 @@ public enum PaginationState<PageDependency, Element> {
         }
     }
 
-    var dependency: PageDependency? {
+    var nextDependency: PageDependency? {
         switch self {
         case let .loading(dependency, _),
              let .loaded(dependency, _, _):
             return dependency
         }
+    }
+
+    var loadNextPage: PageDependency? {
+        return isLoading ? nextDependency : nil
     }
 
     static func reduce(state: PaginationState, event: Event) -> PaginationState {
@@ -90,30 +73,23 @@ public enum PaginationState<PageDependency, Element> {
 
     private static func reduceLoaded(state: PaginationState, event: Event) -> PaginationState {
         switch event {
-        case .user(.loadNext):
-            return state.dependency.map {
-                .loading(dependency: $0, elements: state.elements)
+        case .loadNext:
+            return state.nextDependency.map {
+                .loading(nextDependency: $0, elements: state.elements)
             } ?? state
-        case let .user(.dependency(dependency)):
-            return .loading(dependency: dependency, elements: [])
-        case .pageProvider:
+        case .error, .page:
             return state
         }
     }
 
     private static func reduceLoading(state: PaginationState, event: Event) -> PaginationState {
         switch event {
-        case let .pageProvider(.response(response)):
-            return .loaded(dependency: response.dependency, elements: state.elements + response.elements, error: nil)
-        case let .pageProvider(.error(error)):
-            return .loaded(dependency: state.dependency, elements: state.elements, error: error)
-        case let .user(userAction):
-            switch userAction {
-            case let .dependency(dependency):
-                return .loading(dependency: dependency, elements: [])
-            case .loadNext:
-                return state
-            }
+        case let .page(page):
+            return .loaded(nextDependency: page.nextDependency, elements: state.elements + page.elements, error: nil)
+        case let .error(error):
+            return .loaded(nextDependency: state.nextDependency, elements: state.elements, error: error)
+        case .loadNext:
+            return state
         }
     }
 }
@@ -124,7 +100,7 @@ extension PaginationState: Equatable where Element: Equatable, PageDependency: E
         case (.loading, .loading),
              (.loaded, .loaded):
             return lhs.elements == rhs.elements
-                && lhs.dependency == rhs.dependency
+                && lhs.nextDependency == rhs.nextDependency
         default:
             return false
         }

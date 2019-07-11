@@ -33,20 +33,17 @@ struct Github: PaginatedAPI {
     ) -> Observable<(Bool, [PaginationResult], Error?)> {
         return Observable.paginationSystem(
             scheduler: SerialDispatchQueueScheduler(qos: .userInteractive),
-            userEvents: Observable.merge(
-                loadNext.map { _ in .loadNext },
-                Observable.merge(
-                    refresh.withLatestFrom(query),
-                    query
-                )
-                .flatMap { q -> Observable<String> in
-                    let url = !q.isEmpty ? q.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
-                        .map { "https://api.github.com/search/repositories?q=\($0)" } : nil
-                    return url.map { .just($0) } ?? .just("")
-                }
-                .map { .dependency($0) }
+            dependencies: Observable.merge(
+                refresh.withLatestFrom(query),
+                query
             )
-        ) { dependency -> Observable<PageResponse<String, GHRepo>> in
+            .flatMap { q -> Observable<String> in
+                let url = !q.isEmpty ? q.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
+                    .map { "https://api.github.com/search/repositories?q=\($0)" } : nil
+                return url.map { .just($0) } ?? .just("")
+            },
+            loadNext: loadNext
+        ) { dependency -> Observable<Page<String, GHRepo>> in
             return URL(string: dependency)
                 .map { URLRequest(url: $0) }
                 .map(URLSession.shared.rx.response)?
@@ -62,8 +59,8 @@ struct Github: PaginatedAPI {
                     let links = try linksHeader.map(parseLinks) ?? [:]
 
                     return response
-                        .map { PageResponse(dependency: links["next"], elements: $0.items) }
-                } ?? .just(PageResponse(dependency: nil, elements: []))
+                        .map { Page(nextDependency: links["next"], elements: $0.items) }
+                } ?? .just(Page(nextDependency: nil, elements: []))
         }
         .map {
             ($0.isLoading, $0.elements.map {

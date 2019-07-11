@@ -43,14 +43,13 @@ struct MovieDB: PaginatedAPI {
     ) -> Observable<(Bool, [PaginationResult], Error?)> {
         return Observable.paginationSystem(
             scheduler: SerialDispatchQueueScheduler(qos: .userInteractive),
-            userEvents: Observable.merge(
-                loadNext.map { .loadNext },
-                refresh.map { .dependency(MovieDependency.initial) }
-            )
-            .startWith(.dependency(MovieDependency.initial))
-        ) { dependency -> Observable<PageResponse<MovieDependency, Movie>> in
+            dependencies: refresh
+                .map { MovieDependency.initial }
+                .startWith(MovieDependency.initial),
+            loadNext: loadNext
+        ) { dependency -> Observable<Page<MovieDependency, Movie>> in
             guard dependency.page <= dependency.totalPages else {
-                return .just(.init(dependency: nil, elements: []))
+                return .just(.init(nextDependency: nil, elements: []))
             }
 
             let request = URLRequest(url: URL(string: "https://api.themoviedb.org/3/discover/movie?api_key=\(MovieDB.apiKey)&sort_by=popularity.desc&page=\(dependency.page)")!)
@@ -61,8 +60,8 @@ struct MovieDB: PaginatedAPI {
                     decoder.keyDecodingStrategy = .convertFromSnakeCase
                     return (try? decoder.decode(MovieResponse.self, from: data))
                         .map {
-                            PageResponse(
-                                dependency: .init(
+                            Page(
+                                nextDependency: .init(
                                     page: dependency.page + 1,
                                     totalPages: $0.totalPages
                                 ),

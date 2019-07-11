@@ -17,18 +17,22 @@ class RxPaginationFeedbackTests: XCTestCase {
 
     func testSimplePagination() {
 
-        let userEvents: Observable<PaginationState<Int, Int>.UserEvent> = scheduler.createHotObservable([
-            .next(1, .dependency(0)),
-            .next(2, .loadNext),
-            .next(3, .loadNext),
-            .next(4, .dependency(0))
+        let loadNext = scheduler.createHotObservable([
+            .next(1, ()),
+            .next(2, ()),
+        ]).asObservable()
+
+        let dependencies = scheduler.createHotObservable([
+            .next(0, 0),
+            .next(3, 0)
         ]).asObservable()
 
         let stateObs = scheduler.createObserver(PaginationState<Int, Int>.self)
 
         let state: Observable<PaginationState<Int, Int>> = Observable.paginationSystem(
-            scheduler: scheduler,
-            userEvents: userEvents,
+            scheduler: self.scheduler,
+            dependencies: dependencies,
+            loadNext: loadNext,
             pageProvider: SimplePageProvider(pageSize: 5).getPage
         )
 
@@ -40,24 +44,22 @@ class RxPaginationFeedbackTests: XCTestCase {
 
         XCTAssertEqual(
             stateObs.events, [
-                .next(0, .loading(dependency: nil, elements: [])),
-                .next(1, .loading(dependency: 0, elements: [])),
-                .next(1, .loaded(dependency: 5, elements: [1, 2, 3, 4, 5], error: nil)),
-                .next(2, .loading(dependency: 5, elements: [1, 2, 3, 4, 5])),
-                .next(2, .loaded(dependency: 10, elements: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], error: nil)),
-                .next(3, .loading(dependency: 10, elements: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])),
-                .next(3, .loaded(dependency: 15, elements: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], error: nil)),
-                .next(4, .loading(dependency: 0, elements: [])),
-                .next(4, .loaded(dependency: 5, elements: [1, 2, 3, 4, 5], error: nil))
+                .next(0, .loading(nextDependency: 0, elements: [])),
+                .next(0, .loaded(nextDependency: 5, elements: (1...5).map { $0 }, error: nil)),
+                .next(1, .loading(nextDependency: 5, elements: (1...5).map { $0 })),
+                .next(1, .loaded(nextDependency: 10, elements: (1...10).map { $0 }, error: nil)),
+                .next(2, .loading(nextDependency: 10, elements: (1...10).map { $0 })),
+                .next(2, .loaded(nextDependency: 15, elements: (1...15).map { $0 }, error: nil)),
+                .next(3, .loading(nextDependency: 0, elements: [])),
+                .next(3, .loaded(nextDependency: 5, elements: (1...5).map { $0 }, error: nil))
             ]
         )
     }
 
     func testDataSourceError() {
 
-        let userEvents: Observable<PaginationState<Int, Int>.UserEvent> = scheduler.createHotObservable([
-            .next(1, .dependency(0)),
-            .next(2, .loadNext)
+        let loadNext = scheduler.createHotObservable([
+            .next(1, ())
         ]).asObservable()
 
         let stateObs = scheduler.createObserver(PaginationState<Int, Int>.self)
@@ -65,8 +67,9 @@ class RxPaginationFeedbackTests: XCTestCase {
 
         let state = Observable.paginationSystem(
             scheduler: scheduler,
-            userEvents: userEvents
-        ) { _ -> Observable<PageResponse<Int, Int>> in
+            dependencies: .just(0),
+            loadNext: loadNext
+        ) { _ -> Observable<Page<Int, Int>> in
             return .error(String.outOfBounds)
         }
 
@@ -83,53 +86,30 @@ class RxPaginationFeedbackTests: XCTestCase {
 
         XCTAssertEqual(
             stateObs.events, [
-                .next(0, .loading(dependency: nil, elements: [])),
-                .next(1, .loading(dependency: 0, elements: [])),
-                .next(1, .loaded(dependency: 0, elements: [], error: String.outOfBounds)),
-                .next(2, .loading(dependency: 0, elements: [])),
-                .next(2, .loaded(dependency: 0, elements: [], error: String.outOfBounds))
+                .next(0, .loading(nextDependency: 0, elements: [])),
+                .next(0, .loaded(nextDependency: 0, elements: [], error: String.outOfBounds)),
+                .next(1, .loading(nextDependency: 0, elements: [])),
+                .next(1, .loaded(nextDependency: 0, elements: [], error: String.outOfBounds))
             ]
         )
 
         XCTAssertEqual(
             errorObs.events, [
-                .next(1, String.outOfBounds),
-                .next(2, String.outOfBounds)
-            ]
-        )
-    }
-
-    func testPageProviderEmptyPage() {
-
-        let stateObs = scheduler.createObserver(PaginationState<Int, Int>.self)
-
-        let state: Observable<PaginationState<Int, Int>> =  Observable.paginationSystem(
-            scheduler: scheduler,
-            userEvents: .empty()
-        ) { _ -> Observable<PageResponse<Int, Int>> in
-            XCTFail("Should not be called")
-            return .empty()
-        }
-
-        state
-            .subscribe(stateObs)
-            .disposed(by: disposeBag)
-
-        scheduler.start()
-
-        XCTAssertEqual(
-            stateObs.events, [
-                .next(0, .loading(dependency: nil, elements: []))
+                .next(0, String.outOfBounds),
+                .next(1, String.outOfBounds)
             ]
         )
     }
 
     func testDependency() {
 
-        let userEvents: Observable<PaginationState<String, Int>.UserEvent> = scheduler.createHotObservable([
-            .next(1, .dependency("page1")),
-            .next(2, .loadNext),
-            .next(3, .dependency("page3")),
+        let loadNext = scheduler.createHotObservable([
+            .next(2, ()),
+        ]).asObservable()
+
+        let dependencies = scheduler.createHotObservable([
+            .next(1, "page1"),
+            .next(3, "page3"),
         ]).asObservable()
 
         let stateObs = scheduler.createObserver(PaginationState<String, Int>.self)
@@ -137,12 +117,14 @@ class RxPaginationFeedbackTests: XCTestCase {
             "page1" : [1, 2, 3, 4, 5],
             "page3": [6, 7, 8, 9, 10]
         ]
-        let state: Observable<PaginationState<String, Int>> =  Observable.paginationSystem(
-            scheduler: scheduler,
-            userEvents: userEvents
-        ) { dependency -> Observable<PageResponse<String, Int>> in
-            .just(.init(dependency: "page2", elements: data[dependency, default: []]))
-        }
+        let state: Observable<PaginationState<String, Int>> =
+            Observable.paginationSystem(
+                scheduler: self.scheduler,
+                dependencies: dependencies,
+                loadNext: loadNext
+            ) { dependency -> Observable<Page<String, Int>> in
+                .just(.init(nextDependency: "page2", elements: data[dependency, default: []]))
+            }
 
         state
             .subscribe(stateObs)
@@ -152,36 +134,37 @@ class RxPaginationFeedbackTests: XCTestCase {
 
         XCTAssertEqual(
             stateObs.events, [
-                .next(0, .loading(dependency: nil, elements: [])),
-                .next(1, .loading(dependency: "page1", elements: [])),
-                .next(1, .loaded(dependency: "page2", elements: [1, 2, 3, 4, 5], error: nil)),
-                .next(2, .loading(dependency: "page2", elements: [1, 2, 3, 4, 5])),
-                .next(2, .loaded(dependency: "page2", elements: [1, 2, 3, 4, 5], error: nil)),
-                .next(3, .loading(dependency: "page3", elements: [])),
-                .next(3, .loaded(dependency: "page2", elements: [6, 7, 8, 9, 10], error: nil))
+                .next(1, .loading(nextDependency: "page1", elements: [])),
+                .next(1, .loaded(nextDependency: "page2", elements: (1...5).map { $0 }, error: nil)),
+                .next(2, .loading(nextDependency: "page2", elements: (1...5).map { $0 })),
+                .next(2, .loaded(nextDependency: "page2", elements: (1...5).map { $0 }, error: nil)),
+                .next(3, .loading(nextDependency: "page3", elements: [])),
+                .next(3, .loaded(nextDependency: "page2", elements: (6...10).map { $0 }, error: nil))
             ]
         )
     }
 
     func testDependencyRequestCanceled() {
 
-        let userEvents: Observable<PaginationState<String, Int>.UserEvent> = scheduler.createHotObservable([
-            .next(1, .dependency("page1")),
-            .next(2, .dependency("page2")),
+        let dependencies = scheduler.createHotObservable([
+            .next(1, "page1"),
+            .next(2, "page2"),
         ]).asObservable()
 
         let stateObs = scheduler.createObserver(PaginationState<String, Int>.self)
         let data = [
-            "page1" : [1, 2, 3, 4, 5],
-            "page2": [6, 7, 8, 9, 10]
+            "page1" : (1...5).map { $0 },
+            "page2": (6...10).map { $0 }
         ]
-        let state: Observable<PaginationState<String, Int>> =  Observable.paginationSystem(
-            scheduler: scheduler,
-            userEvents: userEvents
-        ) { dependency -> Observable<PageResponse<String, Int>> in
-            Observable.just(PageResponse.init(dependency: nil, elements: data[dependency, default: []]))
-                .delay(.seconds(2), scheduler: self.scheduler)
-        }
+        let state: Observable<PaginationState<String, Int>> =
+            Observable.paginationSystem(
+                scheduler: self.scheduler,
+                dependencies: dependencies,
+                loadNext: .empty()
+            ) { dependency -> Observable<Page<String, Int>> in
+                Observable.just(Page(nextDependency: nil, elements: data[dependency, default: []]))
+                    .delay(.seconds(2), scheduler: self.scheduler)
+            }
 
         state
             .subscribe(stateObs)
@@ -191,10 +174,9 @@ class RxPaginationFeedbackTests: XCTestCase {
 
         XCTAssertEqual(
             stateObs.events, [
-                .next(0, .loading(dependency: nil, elements: [])),
-                .next(1, .loading(dependency: "page1", elements: [])),
-                .next(2, .loading(dependency: "page2", elements: [])),
-                .next(4, .loaded(dependency: nil, elements: [6, 7, 8, 9, 10], error: nil))
+                .next(1, .loading(nextDependency: "page1", elements: [])),
+                .next(2, .loading(nextDependency: "page2", elements: [])),
+                .next(4, .loaded(nextDependency: nil, elements: (6...10).map { $0 }, error: nil))
             ]
         )
     }
@@ -204,19 +186,24 @@ class RxPaginationFeedbackTests: XCTestCase {
     }
 
     func _testSimplePaginationUsingDriver() {
-        let userEvents: Driver<PaginationState<Int, Int>.UserEvent> = scheduler.createHotObservable([
-            .next(1, .dependency(0)),
-            .next(2, .loadNext),
-            .next(3, .loadNext),
-            .next(4, .dependency(0))
+        let loadNext: Driver<Void> = scheduler.createHotObservable([
+            .next(1, ()),
+            .next(2, ())
+        ]).asSharedSequence(onErrorDriveWith: .empty())
+
+        let dependencies: Driver<Int> = scheduler.createHotObservable([
+            .next(0, 0),
+            .next(3, 0)
         ]).asSharedSequence(onErrorDriveWith: .empty())
 
         let stateObs = scheduler.createObserver(PaginationState<Int, Int>.self)
 
-        let state: Driver<PaginationState<Int, Int>> = Driver.paginationSystem(
-            userEvents: userEvents,
-            pageProvider: SimplePageProvider(pageSize: 5).getPage
-        )
+        let state: Driver<PaginationState<Int, Int>> =
+            Driver.paginationSystem(
+                dependencies: dependencies,
+                loadNext: loadNext,
+                pageProvider: SimplePageProvider(pageSize: 5).getPage
+            )
 
         state
             .drive(stateObs)
@@ -226,15 +213,14 @@ class RxPaginationFeedbackTests: XCTestCase {
 
         XCTAssertEqual(
             stateObs.events, [
-                .next(0, .loading(dependency: nil, elements: [])),
-                .next(1, .loading(dependency: 0, elements: [])),
-                .next(1, .loaded(dependency: 5, elements: [1, 2, 3, 4, 5], error: nil)),
-                .next(2, .loading(dependency: 5, elements: [1, 2, 3, 4, 5])),
-                .next(2, .loaded(dependency: 10, elements: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], error: nil)),
-                .next(3, .loading(dependency: 10, elements: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])),
-                .next(3, .loaded(dependency: 15, elements: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], error: nil)),
-                .next(4, .loading(dependency: 0, elements: [])),
-                .next(4, .loaded(dependency: 5, elements: [1, 2, 3, 4, 5], error: nil))
+                .next(0, .loading(nextDependency: 0, elements: [])),
+                .next(0, .loaded(nextDependency: 5, elements: (1...5).map { $0 }, error: nil)),
+                .next(1, .loading(nextDependency: 5, elements: (1...5).map { $0 })),
+                .next(1, .loaded(nextDependency: 10, elements: (1...10).map { $0 }, error: nil)),
+                .next(2, .loading(nextDependency: 10, elements: (1...10).map { $0 })),
+                .next(2, .loaded(nextDependency: 15, elements: (1...15).map { $0 }, error: nil)),
+                .next(3, .loading(nextDependency: 0, elements: [])),
+                .next(3, .loaded(nextDependency: 5, elements: (1...5).map { $0 }, error: nil))
             ]
         )
     }
@@ -247,18 +233,18 @@ extension String: Error {
 
 class SimplePageProvider {
 
-    let data = (1..<1000).map { $0 }
+    let data = (1...100).map { $0 }
     let pageSize: Int
 
     init(pageSize: Int) {
         self.pageSize = pageSize
     }
 
-    func getPage(accumulatedCount: Int) -> Observable<PageResponse<Int, Int>> {
-        guard accumulatedCount < data.count, accumulatedCount + pageSize < data.count else { return .error(String.outOfBounds) }
+    func getPage(accumulatedCount: Int) -> Observable<Page<Int, Int>> {
+        guard accumulatedCount + pageSize < data.count else { return .error(String.outOfBounds) }
         return Observable.just(
-            PageResponse(
-                dependency: accumulatedCount + pageSize,
+            Page(
+                nextDependency: accumulatedCount + pageSize,
                 elements: Array(data[accumulatedCount..<(accumulatedCount + pageSize)])
             )
         )

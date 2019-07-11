@@ -10,20 +10,21 @@ Generic RxSwift operator to easily interact with paginated APIs. Based on [RxFee
 ```swift
 public typealias PageProvider<PageDependency, Element> = (PageDependency) -> Observable<PageResponse<PageDependency, Element>>
 
-public static func paginationSystem<PageDependency: Hashable, Element>(
+public static func paginationSystem<PageDependency: Equatable, Element>(
     scheduler: ImmediateSchedulerType,
-    userEvents: Observable<PaginationState<PageDependency, Element>.UserEvent>,
+    dependencies: Observable<PageDependency>,
+    loadNext: Observable<Void>,
     pageProvider: @escaping PageProvider<PageDependency, Element>
-) -> Observable<PaginationState<PageDependency, Element>>
+) -> Observable<PaginationState<PageDependency, Element>> {
 ```
 
 ## Features
 * Simple state machine to represent pagination use cases.
 * Reusable pagination logic. No need to duplicate state across different screens with paginated apis.
 * Observe `PaginationState` to react to:
-    * loading page events
-    * latest api error
-    * changes on the list of elements
+    * Loading page events
+    * Latest api error
+    * Changes on the list of elements
 
 # Examples
 
@@ -40,8 +41,8 @@ struct User: Decodable {
 }
 
 let state = Driver.paginationSystem(
-    userEvents: loadNext.map { .loadNext }
-        .startWith(.dependency(0))
+    dependencies: .just(0),
+    loadNext: loadNext
 ) { dependency -> Observable<PageResponse<Int, User>> in
 
     let page = ((dependency / 3) % 4) + 1
@@ -58,7 +59,7 @@ let state = Driver.paginationSystem(
         }
 }
 
-state.
+state
     .map { $0.elements }
     .drive(tableView.rx.items(cellIdentifier: "Cell", cellType: UITableViewCell.self)) { index, item, cell in
         cell.textLabel?.text = "\(item.firstName) - \(item.lastName)"

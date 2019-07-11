@@ -37,18 +37,16 @@ struct Reqres: PaginatedAPI {
     ) -> Observable<(Bool, [PaginationResult], Error?)> {
         return Observable.paginationSystem(
             scheduler: SerialDispatchQueueScheduler(qos: .userInteractive),
-            userEvents: Observable.merge(
-                loadNext.map { .loadNext },
-                Observable.merge(
-                    numberInput,
-                    refresh.withLatestFrom(numberInput)
-                )
-                .compactMap { Int($0) }
-                .map { .dependency(.init(offset: 0, limit: $0)) }
+            dependencies: Observable.merge(
+                numberInput,
+                refresh.withLatestFrom(numberInput)
             )
-        ) { dependency -> Observable<PageResponse<ReqresDependency, User>> in
+            .compactMap { Int($0) }
+            .map { .init(offset: 0, limit: $0) },
+            loadNext: loadNext
+        ) { dependency -> Observable<Page<ReqresDependency, User>> in
             if dependency.offset > dependency.limit {
-                return .just(.init(dependency: nil, elements: []))
+                return .just(.init(nextDependency: nil, elements: []))
             }
 
             let offsetModulo = ((dependency.offset / 3) % 4) + 1
@@ -60,8 +58,8 @@ struct Reqres: PaginatedAPI {
                     decoder.keyDecodingStrategy = .convertFromSnakeCase
                     return (try? decoder.decode(ReqresResponse.self, from: $0).data).map {
                         let newOffset = dependency.offset + $0.count
-                        return PageResponse(
-                            dependency: .init(
+                        return Page(
+                            nextDependency: .init(
                                 offset: newOffset,
                                 limit: dependency.limit
                             )

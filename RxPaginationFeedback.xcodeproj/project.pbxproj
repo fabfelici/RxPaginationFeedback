@@ -150,7 +150,7 @@
 		OBJ_479 /* RxSwift.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = "RxSwift::RxSwift::Product" /* RxSwift.framework */; };
 		OBJ_489 /* Package.swift in Sources */ = {isa = PBXBuildFile; fileRef = OBJ_24 /* Package.swift */; };
 		OBJ_495 /* ObservableType+RxPaginationFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = OBJ_9 /* ObservableType+RxPaginationFeedback.swift */; };
-		OBJ_497 /* PageResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = OBJ_11 /* PageResponse.swift */; };
+		OBJ_497 /* Page.swift in Sources */ = {isa = PBXBuildFile; fileRef = OBJ_11 /* Page.swift */; };
 		OBJ_498 /* PaginationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = OBJ_12 /* PaginationState.swift */; };
 		OBJ_500 /* RxFeedback.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = "RxFeedback::RxFeedback::Product" /* RxFeedback.framework */; };
 		OBJ_501 /* RxCocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = "RxSwift::RxCocoa::Product" /* RxCocoa.framework */; };
@@ -517,7 +517,7 @@
 		OBJ_107 /* UIDatePicker+Rx.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UIDatePicker+Rx.swift"; sourceTree = "<group>"; };
 		OBJ_108 /* UIGestureRecognizer+Rx.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UIGestureRecognizer+Rx.swift"; sourceTree = "<group>"; };
 		OBJ_109 /* UIImageView+Rx.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UIImageView+Rx.swift"; sourceTree = "<group>"; };
-		OBJ_11 /* PageResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageResponse.swift; sourceTree = "<group>"; };
+		OBJ_11 /* Page.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Page.swift; sourceTree = "<group>"; };
 		OBJ_110 /* UILabel+Rx.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UILabel+Rx.swift"; sourceTree = "<group>"; };
 		OBJ_111 /* UINavigationController+Rx.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UINavigationController+Rx.swift"; sourceTree = "<group>"; };
 		OBJ_112 /* UINavigationItem+Rx.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UINavigationItem+Rx.swift"; sourceTree = "<group>"; };
@@ -1337,7 +1337,7 @@
 			isa = PBXGroup;
 			children = (
 				OBJ_9 /* ObservableType+RxPaginationFeedback.swift */,
-				OBJ_11 /* PageResponse.swift */,
+				OBJ_11 /* Page.swift */,
 				OBJ_12 /* PaginationState.swift */,
 			);
 			name = RxPaginationFeedback;
@@ -1742,7 +1742,7 @@
 			buildActionMask = 0;
 			files = (
 				OBJ_495 /* ObservableType+RxPaginationFeedback.swift in Sources */,
-				OBJ_497 /* PageResponse.swift in Sources */,
+				OBJ_497 /* Page.swift in Sources */,
 				OBJ_498 /* PaginationState.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
