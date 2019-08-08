@@ -12,19 +12,16 @@ public typealias PageProvider<PageDependency, Element> = (PageDependency) -> Obs
 
 public static func paginationSystem<PageDependency: Equatable, Element>(
     scheduler: ImmediateSchedulerType,
-    dependencies: Observable<PageDependency>,
+    initialDependency: PageDependency,
     loadNext: Observable<Void>,
     pageProvider: @escaping PageProvider<PageDependency, Element>
-) -> Observable<PaginationState<PageDependency, Element>> {
+) -> Observable<[Element]> {
 ```
 
 ## Features
 * Simple state machine to represent pagination use cases.
 * Reusable pagination logic. No need to duplicate state across different screens with paginated apis.
-* Observe `PaginationState` to react to:
-    * Loading page events
-    * Latest api error
-    * Changes on the list of elements
+* Observe result to react to changes on the list of elements.
 
 # Examples
 
@@ -40,8 +37,8 @@ struct User: Decodable {
     let lastName: String
 }
 
-let state = Driver.paginationSystem(
-    dependencies: .just(0),
+let elements = Driver.paginationSystem(
+    initialDependency: 0,
     loadNext: loadNext
 ) { dependency -> Observable<PageResponse<Int, User>> in
 
@@ -59,8 +56,7 @@ let state = Driver.paginationSystem(
         }
 }
 
-state
-    .map { $0.elements }
+elements
     .drive(tableView.rx.items(cellIdentifier: "Cell", cellType: UITableViewCell.self)) { index, item, cell in
         cell.textLabel?.text = "\(item.firstName) - \(item.lastName)"
     }

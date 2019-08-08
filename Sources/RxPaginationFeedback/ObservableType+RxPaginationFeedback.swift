@@ -17,7 +17,7 @@ extension ObservableType where Element == Any {
          PageDependency:  Any type of information needed to fetch a page.
          Element: The accumulated elements during paging.
 
-         - parameter dependencies: The dependecies needed to fetch pages.
+         - parameter initialDependency: The initial dependency needed to fetch first page.
          - parameter loadNext: Observable of load next trigger events.
          - parameter pageProvider: Provides observables of pages given a `PageDependency`.
             The operation is canceled If dependencies emits a new value.
@@ -26,66 +26,68 @@ extension ObservableType where Element == Any {
 
     public static func paginationSystem<PageDependency: Equatable, Element>(
         scheduler: ImmediateSchedulerType,
-        dependencies: Observable<PageDependency>,
+        initialDependency: PageDependency,
         loadNext: Observable<Void>,
         pageProvider: @escaping PageProvider<PageDependency, Element>
-    ) -> Observable<PaginationState<PageDependency, Element>> {
-        return dependencies
-            .flatMapLatest {
-                system(
-                    initialState: .loading(nextDependency: $0, elements: []),
-                    reduce: PaginationState.reduce,
-                    scheduler: scheduler,
-                    feedback: react(
-                        request: { $0.loadNextPage },
-                        effects: paginationEffect(pageProvider)
-                    ),
-                    { _ in
-                        loadNext.map { .loadNext }
-                    }
-                )
+    ) -> Observable<[Element]> {
+        return system(
+            initialState: .init(nextDependency: initialDependency),
+            reduce: PaginationState.reduce,
+            scheduler: scheduler,
+            feedback: react(
+                request: { $0.loadNextPage },
+                effects: paginationEffect(pageProvider)
+            ),
+            {
+                $0.flatMapLatest {
+                    $0.isLoading ? .empty() : loadNext
+                }
+                .map { .loadNext }
             }
+        )
+        .map { $0.elements }
     }
-
 }
 
 extension SharedSequenceConvertibleType where Element == Any, SharingStrategy == DriverSharingStrategy {
 
     public static func paginationSystem<PageDependency: Equatable, Element>(
-        dependencies: Driver<PageDependency>,
+        initialDependency: PageDependency,
         loadNext: Driver<Void>,
         pageProvider: @escaping PageProvider<PageDependency, Element>
-    ) -> Driver<PaginationState<PageDependency, Element>> {
-        return dependencies
-            .flatMapLatest {
-                system(
-                    initialState: .loading(nextDependency: $0, elements: []),
-                    reduce: PaginationState.reduce,
-                    feedback: react(
-                        request: { $0.loadNextPage },
-                        effects: {
-                            paginationEffect(pageProvider)($0)
-                                .asSignal(onErrorSignalWith: .empty())
-                        }
-                    ),
-                    { _ in
-                        loadNext.map { .loadNext }
-                            .asSignal(onErrorSignalWith: .empty())
-                    }
-                )
+    ) -> Driver<[Element]> {
+        return system(
+            initialState: .init(nextDependency: initialDependency),
+            reduce: PaginationState.reduce,
+            feedback: react(
+                request: { $0.loadNextPage },
+                effects: {
+                    paginationEffect(pageProvider)($0)
+                        .asSignal(onErrorSignalWith: .empty())
+                }
+            ),
+            {
+                $0.flatMapLatest {
+                    $0.isLoading ? .empty() : loadNext
+                }
+                .map { .loadNext }
+                .asSignal(onErrorSignalWith: .empty())
             }
+        )
+        .map { $0.elements }
     }
 
 }
 
-fileprivate func paginationEffect<PageDependency, Element>(
+func paginationEffect<PageDependency, Element>(
     _ pageProvider: @escaping PageProvider<PageDependency, Element>
 ) -> (PageDependency) -> Observable<PaginationState<PageDependency, Element>.Event> {
     return {
         pageProvider($0)
             .materialize()
             .compactMap {
-                ($0.element.map { .page($0) } ?? $0.error.map { .error($0) })
+                $0.element.map { .success($0) } ?? $0.error.map { .failure($0) }
             }
-    }
+            .map { .page($0) }
+        }
 }

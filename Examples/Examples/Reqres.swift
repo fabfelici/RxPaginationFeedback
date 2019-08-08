@@ -34,44 +34,44 @@ struct Reqres: PaginatedAPI {
         query: Observable<String>,
         refresh: Observable<Void>,
         numberInput: Observable<String>
-    ) -> Observable<(Bool, [PaginationResult], Error?)> {
-        return Observable.paginationSystem(
-            scheduler: SerialDispatchQueueScheduler(qos: .userInteractive),
-            dependencies: Observable.merge(
-                numberInput,
-                refresh.withLatestFrom(numberInput)
-            )
-            .compactMap { Int($0) }
-            .map { .init(offset: 0, limit: $0) },
-            loadNext: loadNext
-        ) { dependency -> Observable<Page<ReqresDependency, User>> in
-            if dependency.offset > dependency.limit {
-                return .just(.init(nextDependency: nil, elements: []))
-            }
-
-            let offsetModulo = ((dependency.offset / 3) % 4) + 1
-            let urlRequest = URLRequest(url: URL(string: "https://reqres.in/api/users?page=\(offsetModulo)")!)
-
-            return URLSession.shared.rx.data(request: urlRequest)
-                .compactMap {
-                    let decoder = JSONDecoder()
-                    decoder.keyDecodingStrategy = .convertFromSnakeCase
-                    return (try? decoder.decode(ReqresResponse.self, from: $0).data).map {
-                        let newOffset = dependency.offset + $0.count
-                        return Page(
-                            nextDependency: .init(
-                                offset: newOffset,
-                                limit: dependency.limit
-                            )
-                        , elements: $0)
-                    }
+    ) -> Observable<[PaginationResult]> {
+        return Observable.merge(
+            numberInput,
+            refresh.withLatestFrom(numberInput)
+        )
+        .map { Int($0) ?? 0 }
+        .map { .init(offset: 0, limit: $0) }
+        .flatMapLatest {
+            Observable.paginationSystem(
+                scheduler: SerialDispatchQueueScheduler(qos: .userInteractive),
+                initialDependency: $0,
+                loadNext: loadNext
+            ) { dependency -> Observable<Page<ReqresDependency, User>> in
+                if dependency.offset > dependency.limit {
+                    return .just(.init(nextDependency: nil, elements: []))
                 }
-        }
-        .map {
-            ($0.isLoading, $0.elements.map {
-                PaginationResult(title: $0.firstName, subtitle: $0.lastName)
-            }, $0.error)
+
+                let offsetModulo = ((dependency.offset / 3) % 4) + 1
+                let urlRequest = URLRequest(url: URL(string: "https://reqres.in/api/users?page=\(offsetModulo)")!)
+
+                return URLSession.shared.rx.data(request: urlRequest)
+                    .compactMap {
+                        let decoder = JSONDecoder()
+                        decoder.keyDecodingStrategy = .convertFromSnakeCase
+                        return (try? decoder.decode(ReqresResponse.self, from: $0).data).map {
+                            let newOffset = dependency.offset + $0.count
+                            return Page(
+                                nextDependency: .init(
+                                    offset: newOffset,
+                                    limit: dependency.limit
+                                )
+                            , elements: $0)
+                        }
+                    }
+            }
+            .map {
+                $0.map { .init(title: $0.firstName, subtitle: $0.lastName) }
+            }
         }
     }
 }
-

@@ -130,18 +130,18 @@ final class PaginationFeedbackViewController: UIViewController {
             .scan(("", ""), accumulator: {
                 CharacterSet.decimalDigits.isSuperset(of: CharacterSet(charactersIn: $1)) ? ($0.1, $1) : $0
             })
+            .map { $0.1 }
+            .share(replay: 1)
 
         numberInput
-            .subscribe(onNext: { [weak self] in
-                self?.textField.text = $0.1
-            })
+            .bind(to: textField.rx.text)
             .disposed(by: disposeBag)
 
         let items = selectedApi
             .flatMapLatest {
-                $0.elements(loadNext: loadNext, query: searchBarEvent, refresh: refreshEvent.asObservable(), numberInput: numberInput.map { $0.1 })
+                $0.elements(loadNext: loadNext, query: searchBarEvent, refresh: refreshEvent.asObservable(), numberInput: numberInput.distinctUntilChanged())
             }
-            .asDriver(onErrorJustReturn: (true, [], nil))
+            .asDriver(onErrorJustReturn: [])
 
         selectedApi
             .map { !$0.shouldDisplaySearchBar }
@@ -153,20 +153,19 @@ final class PaginationFeedbackViewController: UIViewController {
             .disposed(by: disposeBag)
 
         items
-            .map { $0.0 && $0.1.isEmpty }
+            .map { $0.isEmpty }
             .distinctUntilChanged()
             .drive(refreshControl.rx.isRefreshing)
             .disposed(by: disposeBag)
 
         items
             .map {
-                "\($0.0 ? "Loading" : "Not Loading") \n Items: \($0.1.count) \($0.2.map { " \n Latest Error: \($0.localizedDescription)"} ?? "")"
+                "Items: \($0.count)"
             }
             .drive(statusLabel.rx.text)
             .disposed(by: disposeBag)
 
         items
-            .map { $0.1 }
             .distinctUntilChanged()
             .drive(tableView.rx.items(cellIdentifier: "SimpleCell", cellType: SimpleCell.self)) { index, item, cell in
                 cell.textLabel?.text = "\(item.title) - \(index)"
@@ -187,7 +186,7 @@ protocol PaginatedAPI {
         query: Observable<String>,
         refresh: Observable<Void>,
         numberInput: Observable<String>
-    ) -> Observable<(Bool, [PaginationResult], Error?)>
+    ) -> Observable<[PaginationResult]>
 
     var label: String { get }
     var shouldDisplaySearchBar: Bool { get }

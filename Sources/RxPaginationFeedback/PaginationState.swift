@@ -10,30 +10,26 @@
  reduce events.
  - elements: The accumulated elements.
  - isLoading: Indicates if the system is currenlty fetching a page.
- - error: The latest error returned by the `pageProvider`.
  */
 
-public enum PaginationState<PageDependency, Element> {
+public struct PaginationState<PageDependency, Element> {
 
     enum Event {
         case loadNext
-        case page(Page<PageDependency, Element>)
-        case error(Error)
+        case page(Result<Page<PageDependency, Element>, Error>)
     }
 
-    case loading(nextDependency: PageDependency?, elements: [Element])
-    case loaded(nextDependency: PageDependency?, elements: [Element], error: Error?)
-
-    public var elements: [Element] {
-        switch self {
-        case let .loading(_, elements),
-             let .loaded(_, elements, _):
-            return elements
-        }
+    enum Status {
+        case loading
+        case loaded
     }
 
-    public var isLoading: Bool {
-        switch self {
+    private(set) var status: Status
+    private(set) var nextDependency: PageDependency?
+    private(set) var elements: [Element]
+
+    var isLoading: Bool {
+        switch status {
         case .loading:
             return true
         case .loaded:
@@ -41,29 +37,18 @@ public enum PaginationState<PageDependency, Element> {
         }
     }
 
-    public var error: Error? {
-        switch self {
-        case let .loaded(_, _, error):
-            return error
-        case .loading:
-            return nil
-        }
-    }
-
-    var nextDependency: PageDependency? {
-        switch self {
-        case let .loading(dependency, _),
-             let .loaded(dependency, _, _):
-            return dependency
-        }
-    }
-
     var loadNextPage: PageDependency? {
         return isLoading ? nextDependency : nil
     }
 
+    init(nextDependency: PageDependency) {
+        status = .loading
+        self.nextDependency = nextDependency
+        elements = []
+    }
+
     static func reduce(state: PaginationState, event: Event) -> PaginationState {
-        switch state {
+        switch state.status {
         case .loaded:
             return reduceLoaded(state: state, event: event)
         case .loading:
@@ -74,35 +59,25 @@ public enum PaginationState<PageDependency, Element> {
     private static func reduceLoaded(state: PaginationState, event: Event) -> PaginationState {
         switch event {
         case .loadNext:
-            return state.nextDependency.map {
-                .loading(nextDependency: $0, elements: state.elements)
-            } ?? state
-        case .error, .page:
+            var newState = state
+            newState.status = state.nextDependency.map { _ in .loading } ?? .loaded
+            return newState
+        case .page:
             return state
         }
     }
 
     private static func reduceLoading(state: PaginationState, event: Event) -> PaginationState {
         switch event {
-        case let .page(page):
-            return .loaded(nextDependency: page.nextDependency, elements: state.elements + page.elements, error: nil)
-        case let .error(error):
-            return .loaded(nextDependency: state.nextDependency, elements: state.elements, error: error)
+        case let .page(result):
+            var newState = state
+            newState.status = .loaded
+            let page = try? result.get()
+            newState.nextDependency = page?.nextDependency ?? state.nextDependency
+            newState.elements = state.elements + (page?.elements ?? [])
+            return newState
         case .loadNext:
             return state
-        }
-    }
-}
-
-extension PaginationState: Equatable where Element: Equatable, PageDependency: Equatable {
-    public static func ==(lhs: PaginationState, rhs: PaginationState) -> Bool {
-        switch (lhs, rhs) {
-        case (.loading, .loading),
-             (.loaded, .loaded):
-            return lhs.elements == rhs.elements
-                && lhs.nextDependency == rhs.nextDependency
-        default:
-            return false
         }
     }
 }

@@ -30,45 +30,44 @@ struct Github: PaginatedAPI {
         query: Observable<String>,
         refresh: Observable<Void>,
         numberInput: Observable<String>
-    ) -> Observable<(Bool, [PaginationResult], Error?)> {
-        return Observable.paginationSystem(
-            scheduler: SerialDispatchQueueScheduler(qos: .userInteractive),
-            dependencies: Observable.merge(
-                refresh.withLatestFrom(query),
-                query
-            )
-            .flatMap { q -> Observable<String> in
-                let url = !q.isEmpty ? q.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
-                    .map { "https://api.github.com/search/repositories?q=\($0)" } : nil
-                return url.map { .just($0) } ?? .just("")
-            },
-            loadNext: loadNext
-        ) { dependency -> Observable<Page<String, GHRepo>> in
-            return URL(string: dependency)
-                .map { URLRequest(url: $0) }
-                .map(URLSession.shared.rx.response)?
-                .compactMap { args in
-                    let (httpResponse, data) = args
-                    guard 200 ..< 300 ~= httpResponse.statusCode else {
-                        throw RxCocoaURLError.httpRequestFailed(response: httpResponse, data: data)
+    ) -> Observable<[PaginationResult]> {
+        return Observable.merge(
+            refresh.withLatestFrom(query),
+            query
+        )
+        .map { query -> URL? in
+            let url = !query.isEmpty ? query.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
+                .map { "https://api.github.com/search/repositories?q=\($0)" } : nil
+            return url.flatMap { URL(string: $0) }
+        }
+        .flatMapLatest { url -> Observable<[GHRepo]> in
+
+            guard let url = url else { return Observable.just([]) }
+
+            return Observable.paginationSystem(
+                scheduler: SerialDispatchQueueScheduler(qos: .userInteractive),
+                initialDependency: url,
+                loadNext: loadNext
+            ) { dependency -> Observable<Page<URL, GHRepo>> in
+                URLSession.shared.rx.response(request: URLRequest(url: dependency))
+                    .compactMap { args in
+                        let (httpResponse, data) = args
+                        guard 200 ..< 300 ~= httpResponse.statusCode else {
+                            throw RxCocoaURLError.httpRequestFailed(response: httpResponse, data: data)
+                        }
+
+                        let decoder = JSONDecoder()
+                        let response = try? decoder.decode(GHResponse.self, from: data)
+                        let linksHeader = httpResponse.allHeaderFields["Link"] as? String
+                        let links = try linksHeader.map(parseLinks) ?? [:]
+
+                        return response
+                            .map { Page(nextDependency: links["next"].flatMap { URL(string: $0) }, elements: $0.items) }
                     }
-
-                    let decoder = JSONDecoder()
-                    let response = try? decoder.decode(GHResponse.self, from: data)
-                    let linksHeader = httpResponse.allHeaderFields["Link"] as? String
-                    let links = try linksHeader.map(parseLinks) ?? [:]
-
-                    return response
-                        .map { Page(nextDependency: links["next"], elements: $0.items) }
-                } ?? .just(Page(nextDependency: nil, elements: []))
+            }
         }
         .map {
-            ($0.isLoading, $0.elements.map {
-                PaginationResult(
-                    title: $0.name,
-                    subtitle: $0.url.absoluteString
-                )
-            }, $0.error)
+            $0.map { .init(title: $0.name, subtitle: $0.url.absoluteString ) }
         }
     }
 }
