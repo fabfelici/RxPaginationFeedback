@@ -21,7 +21,7 @@ struct GHRepo: Decodable {
 
 struct Github: PaginatedAPI {
 
-    let label = "Github"
+    let label = "GitHub"
     let shouldDisplaySearchBar = true
     let shouldDisplayTextInput = false
 
@@ -30,7 +30,7 @@ struct Github: PaginatedAPI {
         query: Observable<String>,
         refresh: Observable<Void>,
         numberInput: Observable<String>
-    ) -> Observable<[PaginationResult]> {
+    ) -> Observable<PaginationState> {
         return Observable.merge(
             refresh.withLatestFrom(query),
             query
@@ -38,18 +38,16 @@ struct Github: PaginatedAPI {
         .map { query -> URL? in
             let url = !query.isEmpty ? query.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
                 .map { "https://api.github.com/search/repositories?q=\($0)" } : nil
-            return url.flatMap { URL(string: $0) }
+            return url.flatMap(URL.init)
         }
-        .flatMapLatest { url -> Observable<[GHRepo]> in
-
-            guard let url = url else { return Observable.just([]) }
-
-            return Observable.paginationSystem(
+        .flatMapLatest {
+            Observable.paginationSystem(
                 scheduler: SerialDispatchQueueScheduler(qos: .userInteractive),
-                initialDependency: url,
+                initialDependency: $0,
                 loadNext: loadNext
-            ) { dependency -> Observable<Page<URL, GHRepo>> in
-                URLSession.shared.rx.response(request: URLRequest(url: dependency))
+            ) {
+                guard let url = $0 else { return .just(Page(nextDependency: nil, elements: [])) }
+                return URLSession.shared.rx.response(request: URLRequest(url: url))
                     .compactMap { args in
                         let (httpResponse, data) = args
                         guard 200 ..< 300 ~= httpResponse.statusCode else {
@@ -62,12 +60,17 @@ struct Github: PaginatedAPI {
                         let links = try linksHeader.map(parseLinks) ?? [:]
 
                         return response
-                            .map { Page(nextDependency: links["next"].flatMap { URL(string: $0) }, elements: $0.items) }
+                            .map {
+                                Page(
+                                    nextDependency: links["next"].flatMap(URL.init),
+                                    elements: $0.items.map { .init(title: $0.name, subtitle: $0.url.absoluteString ) }
+                                )
+                            }
                     }
             }
         }
         .map {
-            $0.map { .init(title: $0.name, subtitle: $0.url.absoluteString ) }
+            .init(isLoading: $0.isLoading, error: $0.error, elements: $0.elements)
         }
     }
 }

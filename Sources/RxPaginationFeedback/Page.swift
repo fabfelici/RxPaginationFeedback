@@ -1,12 +1,5 @@
-//
-//  Page.swift
-//  RxPaginationFeedback
-//
-//  Created by Felici, Fabio on 08/07/2019.
-//
-
 /**
-The structure `pageProvider` function returns once a page has been fetched.
+The structure `PageProvider` function returns once a page has been fetched.
 */
 
 public struct Page<Dependency, Element> {
@@ -15,12 +8,11 @@ public struct Page<Dependency, Element> {
     let elements: [Element]
 
     /**
-         - Parameters:
-             - nextDependency: Any information required in order to fetch the next page.
-             It will be passed to `pageProvider` when system needs to fetch a new page.
-             Pass nil to indicate that no more pages are available.
-             - elements: The array of elements in the page.
-         */
+     - parameter nextDependency: Any information required in order to fetch the next page.
+     It will be passed to `pageProvider` when system needs to fetch a new page.
+     Pass nil to indicate that no more pages are available.
+     - parameter elements: The array of elements in the page.
+     */
 
     public init(nextDependency: Dependency?, elements: [Element]) {
         self.nextDependency = nextDependency

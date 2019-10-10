@@ -1,10 +1,3 @@
-//
-//  ObservableType+RxPaginationFeedback.swift
-//  RxPaginationFeedback
-//
-//  Created by Felici, Fabio on 08/07/2019.
-//
-
 import RxSwift
 import RxFeedback
 import RxCocoa
@@ -14,22 +7,25 @@ public typealias PageProvider<PageDependency, Element> = (PageDependency) -> Obs
 extension ObservableType where Element == Any {
 
     /**
-         PageDependency:  Any type of information needed to fetch a page.
-         Element: The accumulated elements during paging.
+     Rx operator to handle pagination use cases.
 
-         - parameter initialDependency: The initial dependency needed to fetch first page.
-         - parameter loadNext: Observable of load next trigger events.
-         - parameter pageProvider: Provides observables of pages given a `PageDependency`.
-            The operation is canceled If dependencies emits a new value.
-         - returns: The pagination state.
-         */
+     `PageDependency`: Any type of information needed to fetch a page.
+
+     `Element`: The accumulated elements during paging.
+
+     - parameter scheduler: The scheduler used to reduce the events.
+     - parameter initialDependency: The initial dependency needed to fetch first page.
+     - parameter loadNext: Observable of load next events.
+     - parameter pageProvider: Provides observable of page given a `PageDependency`.
+     - returns: The pagination state.
+     */
 
     public static func paginationSystem<PageDependency: Equatable, Element>(
         scheduler: ImmediateSchedulerType,
         initialDependency: PageDependency,
         loadNext: Observable<Void>,
         pageProvider: @escaping PageProvider<PageDependency, Element>
-    ) -> Observable<[Element]> {
+    ) -> Observable<PaginationState<PageDependency, Element>> {
         return system(
             initialState: .init(nextDependency: initialDependency),
             reduce: PaginationState.reduce,
@@ -45,7 +41,6 @@ extension ObservableType where Element == Any {
                 .map { .loadNext }
             }
         )
-        .map { $0.elements }
     }
 }
 
@@ -55,7 +50,7 @@ extension SharedSequenceConvertibleType where Element == Any, SharingStrategy ==
         initialDependency: PageDependency,
         loadNext: Driver<Void>,
         pageProvider: @escaping PageProvider<PageDependency, Element>
-    ) -> Driver<[Element]> {
+    ) -> Driver<PaginationState<PageDependency, Element>> {
         return system(
             initialState: .init(nextDependency: initialDependency),
             reduce: PaginationState.reduce,
@@ -74,7 +69,6 @@ extension SharedSequenceConvertibleType where Element == Any, SharingStrategy ==
                 .asSignal(onErrorSignalWith: .empty())
             }
         )
-        .map { $0.elements }
     }
 
 }

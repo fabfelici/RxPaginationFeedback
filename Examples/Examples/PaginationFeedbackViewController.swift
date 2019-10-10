@@ -21,14 +21,12 @@ final class PaginationFeedbackViewController: UIViewController {
         return label
     }()
 
-    private lazy var apiSlider: UISlider = {
-        let slider = UISlider()
-        slider.isContinuous = false
-        return slider
+    private lazy var apiSelector: UISegmentedControl = {
+        UISegmentedControl()
     }()
 
     private lazy var searchBar: UISearchBar = {
-        return UISearchBar()
+        UISearchBar()
     }()
 
     private lazy var tableView: UITableView = {
@@ -38,11 +36,11 @@ final class PaginationFeedbackViewController: UIViewController {
     }()
 
     private lazy var refreshControl: UIRefreshControl = {
-        return UIRefreshControl()
+        UIRefreshControl()
     }()
 
     private lazy var textField: UITextField = {
-        return UITextField()
+        UITextField()
     }()
 
     private let disposeBag = DisposeBag()
@@ -61,35 +59,25 @@ final class PaginationFeedbackViewController: UIViewController {
         tableView.refreshControl = refreshControl
         searchBar.placeholder = "Search Repositories"
         let textFieldWrapper = UIView()
-        textField.placeholder = "Limit"
+        textField.placeholder = "Pages Limit"
         textField.translatesAutoresizingMaskIntoConstraints = false
         textFieldWrapper.addSubview(textField)
         textField.backgroundColor = .groupTableViewBackground
-        let sliderLabel = UILabel()
-        sliderLabel.text = "Change API:"
-        sliderLabel.font = .systemFont(ofSize: 12)
-        let sliderWrapper = UIStackView(arrangedSubviews: [
-            sliderLabel,
-            apiSlider
-        ])
-        sliderWrapper.spacing = 10
-        sliderWrapper.alignment = .center
-        sliderWrapper.isLayoutMarginsRelativeArrangement = true
-        sliderWrapper.layoutMargins = .init(top: 0, left: 30, bottom: 0, right: 30)
         let stackView = UIStackView(arrangedSubviews: [
             statusLabel,
-            sliderWrapper,
+            apiSelector,
             textFieldWrapper,
             searchBar,
             tableView
         ])
         stackView.isLayoutMarginsRelativeArrangement = true
+        stackView.spacing = 20
         stackView.layoutMargins = .init(top: 20, left: 0, bottom: 0, right: 0)
         stackView.axis = .vertical
         stackView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stackView)
         NSLayoutConstraint.activate([
-            sliderWrapper.heightAnchor.constraint(equalToConstant: 50),
+            apiSelector.heightAnchor.constraint(equalToConstant: 40),
             searchBar.heightAnchor.constraint(equalToConstant: 50),
             stackView.topAnchor.constraint(equalTo: view.topAnchor),
             stackView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -106,18 +94,20 @@ final class PaginationFeedbackViewController: UIViewController {
     private func setupPaginationSystem() {
         let gitHub = Github()
         let apis: [PaginatedAPI] = [gitHub, Reqres(), MovieDB()]
-        apiSlider.minimumValue = 0
-        apiSlider.maximumValue = Float(apis.count - 1)
 
-        apiSlider.rx.value
+        apis.enumerated().forEach {
+            apiSelector.insertSegment(withTitle: $0.element.label, at: $0.offset, animated: false)
+        }
+        apiSelector.selectedSegmentIndex = 0
+
+        apiSelector.rx.controlEvent(.valueChanged)
             .subscribe(onNext: { [weak self] in
-                self?.apiSlider.setValue(Float(Int($0)), animated: false)
                 self?.searchBar.text = nil
             })
             .disposed(by: disposeBag)
 
-        let selectedApi = apiSlider.rx.value
-            .map(Int.init)
+        let selectedApi = apiSelector.rx.controlEvent(.valueChanged)
+            .map { self.apiSelector.selectedSegmentIndex }
             .map { apis[$0] }
             .startWith(gitHub)
 
@@ -126,7 +116,7 @@ final class PaginationFeedbackViewController: UIViewController {
             .throttle(.milliseconds(500), scheduler: MainScheduler.asyncInstance)
         let loadNext = tableView.rx.nearBottom.asObservable().skip(1)
         let numberInput = textField.rx.text.orEmpty
-            .startWith("50")
+            .startWith("10")
             .scan(("", ""), accumulator: {
                 CharacterSet.decimalDigits.isSuperset(of: CharacterSet(charactersIn: $1)) ? ($0.1, $1) : $0
             })
@@ -137,11 +127,16 @@ final class PaginationFeedbackViewController: UIViewController {
             .bind(to: textField.rx.text)
             .disposed(by: disposeBag)
 
-        let items = selectedApi
+        let state = selectedApi
             .flatMapLatest {
-                $0.elements(loadNext: loadNext, query: searchBarEvent, refresh: refreshEvent.asObservable(), numberInput: numberInput.distinctUntilChanged())
+                $0.elements(
+                    loadNext: loadNext,
+                    query: searchBarEvent,
+                    refresh: refreshEvent.asObservable(),
+                    numberInput: numberInput.distinctUntilChanged()
+                )
             }
-            .asDriver(onErrorJustReturn: [])
+            .asDriver(onErrorJustReturn: .init(isLoading: false, error: nil, elements: []))
 
         selectedApi
             .map { !$0.shouldDisplaySearchBar }
@@ -152,20 +147,20 @@ final class PaginationFeedbackViewController: UIViewController {
             .bind(to: textField.superview!.rx.isHidden)
             .disposed(by: disposeBag)
 
-        items
-            .map { $0.isEmpty }
+        state
+            .map { $0.elements.isEmpty && $0.isLoading }
             .distinctUntilChanged()
             .drive(refreshControl.rx.isRefreshing)
             .disposed(by: disposeBag)
 
-        items
+        state
             .map {
-                "Items: \($0.count)"
+                $0.error.map { $0.localizedDescription } ?? "\($0.isLoading ? "Loading" : "Loaded" )\nItems: \($0.elements.count)"
             }
             .drive(statusLabel.rx.text)
             .disposed(by: disposeBag)
 
-        items
+        state.map { $0.elements }
             .distinctUntilChanged()
             .drive(tableView.rx.items(cellIdentifier: "SimpleCell", cellType: SimpleCell.self)) { index, item, cell in
                 cell.textLabel?.text = "\(item.title) - \(index)"
@@ -186,11 +181,17 @@ protocol PaginatedAPI {
         query: Observable<String>,
         refresh: Observable<Void>,
         numberInput: Observable<String>
-    ) -> Observable<[PaginationResult]>
+    ) -> Observable<PaginationState>
 
     var label: String { get }
     var shouldDisplaySearchBar: Bool { get }
     var shouldDisplayTextInput: Bool { get }
+}
+
+struct PaginationState {
+    let isLoading: Bool
+    let error: Error?
+    let elements: [PaginationResult]
 }
 
 struct PaginationResult: Equatable {
@@ -205,12 +206,12 @@ extension Reactive where Base: UITableView {
             return tableView.contentOffset.y + tableView.frame.size.height + edgeOffset > tableView.contentSize.height
         }
 
-        return self.contentOffset.asDriver()
+        return self.contentOffset.asSignal(onErrorSignalWith: .empty())
             .flatMap { _ in
-                return isNearBottomEdge(tableView: self.base, edgeOffset: 20.0)
-                    ? Signal.just(())
-                    : Signal.empty()
-        }
+                return isNearBottomEdge(tableView: self.base)
+                    ? .just(())
+                    : .empty()
+            }
     }
 }
 

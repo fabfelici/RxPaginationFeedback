@@ -1,16 +1,10 @@
-//
-//  PaginationState.swift
-//  RxPaginationFeedback
-//
-//  Created by Felici, Fabio on 08/07/2019.
-//
-
 /**
- The state machine used to represent a paging system. It has only two states, `loading` and `loaded` and contains logic to
- reduce events.
- - elements: The accumulated elements.
- - isLoading: Indicates if the system is currenlty fetching a page.
- */
+The state machine used to represent a paging system. It has only two states, `loading` and `loaded` and contains logic to
+reduce events.
+- `elements`: The accumulated elements.
+- `isLoading`: Indicates if a page is being fetched.
+- `error`: The latest error received while fetching a page.
+*/
 
 public struct PaginationState<PageDependency, Element> {
 
@@ -19,65 +13,57 @@ public struct PaginationState<PageDependency, Element> {
         case page(Result<Page<PageDependency, Element>, Error>)
     }
 
-    enum Status {
-        case loading
-        case loaded
-    }
-
-    private(set) var status: Status
+    public private(set) var elements: [Element]
+    public private(set) var isLoading: Bool
+    public private(set) var error: Error?
     private(set) var nextDependency: PageDependency?
-    private(set) var elements: [Element]
-
-    var isLoading: Bool {
-        switch status {
-        case .loading:
-            return true
-        case .loaded:
-            return false
-        }
-    }
 
     var loadNextPage: PageDependency? {
         return isLoading ? nextDependency : nil
     }
 
+    init(isLoading: Bool, nextDependency: PageDependency?, elements: [Element], error: Error? = nil) {
+        self.isLoading = isLoading
+        self.nextDependency = nextDependency
+        self.elements = elements
+        self.error = error
+    }
+    
     init(nextDependency: PageDependency) {
-        status = .loading
+        isLoading = true
         self.nextDependency = nextDependency
         elements = []
     }
 
     static func reduce(state: PaginationState, event: Event) -> PaginationState {
-        switch state.status {
-        case .loaded:
-            return reduceLoaded(state: state, event: event)
-        case .loading:
-            return reduceLoading(state: state, event: event)
-        }
+        var newState = state
+        state.isLoading ? reduceLoading(state: &newState, event: event) : reduceLoaded(state: &newState, event: event)
+        return newState
     }
 
-    private static func reduceLoaded(state: PaginationState, event: Event) -> PaginationState {
+    private static func reduceLoaded(state: inout PaginationState, event: Event) {
         switch event {
         case .loadNext:
-            var newState = state
-            newState.status = state.nextDependency.map { _ in .loading } ?? .loaded
-            return newState
+            state.error = nil
+            state.isLoading = state.nextDependency.map { _ in true } ?? false
         case .page:
-            return state
+            break
         }
     }
 
-    private static func reduceLoading(state: PaginationState, event: Event) -> PaginationState {
+    private static func reduceLoading(state: inout PaginationState, event: Event) {
         switch event {
         case let .page(result):
-            var newState = state
-            newState.status = .loaded
-            let page = try? result.get()
-            newState.nextDependency = page?.nextDependency ?? state.nextDependency
-            newState.elements = state.elements + (page?.elements ?? [])
-            return newState
+            state.isLoading = false
+            switch result {
+            case let .failure(error):
+                state.error = error
+            case let .success(page):
+                state.nextDependency = page.nextDependency
+                state.elements = state.elements + page.elements
+            }
         case .loadNext:
-            return state
+            break
         }
     }
 }

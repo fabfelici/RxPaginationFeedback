@@ -3,7 +3,16 @@ import RxFeedback
 import RxTest
 import RxSwift
 import RxCocoa
-import RxPaginationFeedback
+@testable import RxPaginationFeedback
+
+extension PaginationState: Equatable where PageDependency: Equatable, Element: Equatable {
+    public static func == (lhs: PaginationState<PageDependency, Element>, rhs: PaginationState<PageDependency, Element>) -> Bool {
+        return lhs.isLoading == rhs.isLoading
+            && lhs.nextDependency == rhs.nextDependency
+            && lhs.elements == rhs.elements
+            && lhs.error.debugDescription == rhs.error.debugDescription
+    }
+}
 
 class RxPaginationFeedbackTests: XCTestCase {
 
@@ -17,7 +26,7 @@ class RxPaginationFeedbackTests: XCTestCase {
 
     func testSimplePagination() {
 
-        let elementsObs = scheduler.createObserver([Int].self)
+        let stateObs = scheduler.createObserver(PaginationState<Int, Int>.self)
 
         scheduler.createHotObservable([
             .next(0, 0),
@@ -33,32 +42,32 @@ class RxPaginationFeedbackTests: XCTestCase {
                 pageProvider: SimplePageProvider(pageSize: 5).getPage
             )
         }
-        .subscribe(elementsObs)
+        .subscribe(stateObs)
         .disposed(by: disposeBag)
 
         scheduler.start()
 
         XCTAssertEqual(
-            elementsObs.events, [
-                .next(0, []),
-                .next(0, (1...5).map { $0 }),
-                .next(1, (1...5).map { $0 }),
-                .next(1, (1...10).map { $0 }),
-                .next(2, (1...10).map { $0 }),
-                .next(2, (1...15).map { $0 }),
-                .next(3, []),
-                .next(3, (1...5).map { $0 })
+            stateObs.events, [
+                .next(0, .init(isLoading: true, nextDependency: 0, elements: [])),
+                .next(0, .init(isLoading: false, nextDependency: 5, elements: (1...5).map { $0 })),
+                .next(1, .init(isLoading: true, nextDependency: 5, elements: (1...5).map { $0 })),
+                .next(1, .init(isLoading: false, nextDependency: 10, elements: (1...10).map { $0 })),
+                .next(2, .init(isLoading: true, nextDependency: 10, elements: (1...10).map { $0 })),
+                .next(2, .init(isLoading: false, nextDependency: 15, elements: (1...15).map { $0 })),
+                .next(3, .init(isLoading: true, nextDependency: 0, elements: [])),
+                .next(3, .init(isLoading: false, nextDependency: 5, elements: (1...5).map { $0 }))
             ]
         )
     }
 
-    func testDependency() {
+    func testChangingDependency() {
 
-        let elementsObs = scheduler.createObserver([Int].self)
+        let stateObs = scheduler.createObserver(PaginationState<String, Int>.self)
 
         let data = [
-            "page1" : [1, 2, 3, 4, 5],
-            "page3": [6, 7, 8, 9, 10]
+            "page1" : (1...5).map { $0 },
+            "page3": (6...10).map { $0 }
         ]
 
         scheduler.createHotObservable([
@@ -76,29 +85,29 @@ class RxPaginationFeedbackTests: XCTestCase {
                 .just(.init(nextDependency: "page2", elements: data[dependency, default: []]))
             }
         }
-        .subscribe(elementsObs)
+        .subscribe(stateObs)
         .disposed(by: disposeBag)
 
         scheduler.start()
 
         XCTAssertEqual(
-            elementsObs.events, [
-                .next(1, []),
-                .next(1, (1...5).map { $0 }),
-                .next(2, (1...5).map { $0 }),
-                .next(2, (1...5).map { $0 }),
-                .next(3, []),
-                .next(3, (6...10).map { $0 })
+            stateObs.events, [
+                .next(1, .init(isLoading: true, nextDependency: "page1", elements: [])),
+                .next(1, .init(isLoading: false, nextDependency: "page2", elements: (1...5).map { $0 })),
+                .next(2, .init(isLoading: true, nextDependency: "page2", elements: (1...5).map { $0 })),
+                .next(2, .init(isLoading: false, nextDependency: "page2", elements: (1...5).map { $0 })),
+                .next(3, .init(isLoading: true, nextDependency: "page3", elements: [])),
+                .next(3, .init(isLoading: false, nextDependency: "page2", elements: (6...10).map { $0 })),
             ]
         )
     }
 
     func testDependencyRequestCanceled() {
 
-        let elementsObs = scheduler.createObserver([Int].self)
+        let stateObs = scheduler.createObserver(PaginationState<String, Int>.self)
 
         let data = [
-            "page1" : (1...5).map { $0 },
+            "page1": (1...5).map { $0 },
             "page2": (6...10).map { $0 }
         ]
 
@@ -115,16 +124,43 @@ class RxPaginationFeedbackTests: XCTestCase {
                     .delay(.seconds(2), scheduler: self.scheduler)
             }
         }
-        .subscribe(elementsObs)
+        .subscribe(stateObs)
         .disposed(by: disposeBag)
 
         scheduler.start()
 
         XCTAssertEqual(
-            elementsObs.events, [
-                .next(1, []),
-                .next(2, []),
-                .next(4, (6...10).map { $0 })
+            stateObs.events, [
+                .next(1, .init(isLoading: true, nextDependency: "page1", elements: [])),
+                .next(2, .init(isLoading: true, nextDependency: "page2", elements: [])),
+                .next(4, .init(isLoading: false, nextDependency: nil, elements: (6...10).map { $0 }))
+            ]
+        )
+    }
+
+    func testPageError() {
+
+        let stateObs = scheduler.createObserver(PaginationState<Int, Int>.self)
+
+        Observable.paginationSystem(
+            scheduler: self.scheduler,
+            initialDependency: 0,
+            loadNext: self.scheduler.createHotObservable([
+                .next(1, ())
+            ]).asObservable(),
+            pageProvider: SimplePageProvider(pageSize: 70).getPage
+        )
+        .subscribe(stateObs)
+        .disposed(by: disposeBag)
+
+        scheduler.start()
+
+        XCTAssertEqual(
+            stateObs.events, [
+                .next(0, .init(isLoading: true, nextDependency: 0, elements: [])),
+                .next(0, .init(isLoading: false, nextDependency: 70, elements: (1...70).map { $0 })),
+                .next(1, .init(isLoading: true, nextDependency: 70, elements: (1...70).map { $0 })),
+                .next(1, .init(isLoading: false, nextDependency: 70, elements: (1...70).map { $0 }, error: String.outOfBounds))
             ]
         )
     }
@@ -135,7 +171,7 @@ class RxPaginationFeedbackTests: XCTestCase {
 
     func _testSimplePaginationUsingDriver() {
 
-        let elementsObs = scheduler.createObserver([Int].self)
+        let stateObs = scheduler.createObserver(PaginationState<Int, Int>.self)
 
         scheduler.createHotObservable([
             .next(0, 0),
@@ -152,21 +188,21 @@ class RxPaginationFeedbackTests: XCTestCase {
                 pageProvider: SimplePageProvider(pageSize: 5).getPage
             )
         }
-        .drive(elementsObs)
+        .drive(stateObs)
         .disposed(by: disposeBag)
 
         scheduler.start()
 
         XCTAssertEqual(
-            elementsObs.events, [
-                .next(0, []),
-                .next(0, (1...5).map { $0 }),
-                .next(1, (1...5).map { $0 }),
-                .next(1, (1...10).map { $0 }),
-                .next(2, (1...10).map { $0 }),
-                .next(2, (1...15).map { $0 }),
-                .next(3, []),
-                .next(3, (1...5).map { $0 }),
+            stateObs.events, [
+                .next(0, .init(isLoading: true, nextDependency: 0, elements: [])),
+                .next(0, .init(isLoading: false, nextDependency: 5, elements: (1...5).map { $0 })),
+                .next(1, .init(isLoading: true, nextDependency: 5, elements: (1...5).map { $0 })),
+                .next(1, .init(isLoading: false, nextDependency: 10, elements: (1...10).map { $0 })),
+                .next(2, .init(isLoading: true, nextDependency: 10, elements: (1...10).map { $0 })),
+                .next(2, .init(isLoading: false, nextDependency: 15, elements: (1...15).map { $0 })),
+                .next(3, .init(isLoading: true, nextDependency: 0, elements: [])),
+                .next(3, .init(isLoading: false, nextDependency: 5, elements: (1...5).map { $0 }))
             ]
         )
     }

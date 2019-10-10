@@ -1,11 +1,11 @@
 Pod::Spec.new do |s|
   s.name         = "RxPaginationFeedback"
-  s.version      = "1.2.0"
+  s.version      = "1.3.0"
   s.summary      = "Generic RxSwift operator to easily interact with paginated APIs."
   s.description  = <<-DESC
     * Simple state machine to represent pagination use cases.
     * Reusable pagination logic. No need to duplicate state across different screens with paginated apis.
-    * Observe result to react to changes on the list of elements
+    * Observe state to react to loading event, latest error and changes on the list of elements.
   DESC
   s.homepage     = "https://github.com/fabfelici/RxPaginationFeedback"
   s.license      = { :type => "MIT", :file => "LICENSE" }

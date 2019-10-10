@@ -15,13 +15,13 @@ public static func paginationSystem<PageDependency: Equatable, Element>(
     initialDependency: PageDependency,
     loadNext: Observable<Void>,
     pageProvider: @escaping PageProvider<PageDependency, Element>
-) -> Observable<[Element]> {
+) -> Observable<PaginationState<PageDependency, Element>>
 ```
 
 ## Features
 * Simple state machine to represent pagination use cases.
 * Reusable pagination logic. No need to duplicate state across different screens with paginated apis.
-* Observe result to react to changes on the list of elements.
+* Observe state to react to loading event, latest error and changes on the list of elements.
 
 # Examples
 
@@ -37,26 +37,26 @@ struct User: Decodable {
     let lastName: String
 }
 
-let elements = Driver.paginationSystem(
+let decoder = JSONDecoder()
+decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+let state = Driver.paginationSystem(
     initialDependency: 0,
     loadNext: loadNext
-) { dependency -> Observable<PageResponse<Int, User>> in
+) { page -> Observable<PageResponse<Int, User>> in
 
-    let page = ((dependency / 3) % 4) + 1
     let urlRequest = URLRequest(url: URL(string: "https://reqres.in/api/users?page=\(page)")!)
 
     return URLSession.shared.rx.data(request: urlRequest)
         .compactMap {
-            let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
-            return (try? decoder.decode(ReqresResponse.self, from: $0).data)
+            (try? decoder.decode(ReqresResponse.self, from: $0).data)
                 .map {
-                    Page(nextDependency: dependency + $0.count, elements: $0)
+                    Page(nextDependency: page + 1, elements: $0)
                 }
         }
 }
 
-elements
+state.map { $0.elements }
     .drive(tableView.rx.items(cellIdentifier: "Cell", cellType: UITableViewCell.self)) { index, item, cell in
         cell.textLabel?.text = "\(item.firstName) - \(item.lastName)"
     }

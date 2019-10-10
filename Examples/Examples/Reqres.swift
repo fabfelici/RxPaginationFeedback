@@ -11,6 +11,7 @@ import RxPaginationFeedback
 
 struct ReqresResponse: Decodable {
     let data: [User]
+    let totalPages: Int
 }
 
 struct User: Decodable {
@@ -19,8 +20,9 @@ struct User: Decodable {
 }
 
 struct ReqresDependency: Equatable {
-    let offset: Int
+    let nextPage: Int
     let limit: Int
+    let totalPages: Int
 }
 
 struct Reqres: PaginatedAPI {
@@ -34,44 +36,45 @@ struct Reqres: PaginatedAPI {
         query: Observable<String>,
         refresh: Observable<Void>,
         numberInput: Observable<String>
-    ) -> Observable<[PaginationResult]> {
+    ) -> Observable<PaginationState> {
         return Observable.merge(
             numberInput,
             refresh.withLatestFrom(numberInput)
         )
-        .map { Int($0) ?? 0 }
-        .map { .init(offset: 0, limit: $0) }
+        .map { Int($0) ?? 1 }
+        .map { .init(nextPage: 1, limit: $0, totalPages: 10) }
         .flatMapLatest {
             Observable.paginationSystem(
                 scheduler: SerialDispatchQueueScheduler(qos: .userInteractive),
                 initialDependency: $0,
                 loadNext: loadNext
-            ) { dependency -> Observable<Page<ReqresDependency, User>> in
-                if dependency.offset > dependency.limit {
+            ) { dependency -> Observable<Page<ReqresDependency, PaginationResult>> in
+                if dependency.nextPage > dependency.limit {
                     return .just(.init(nextDependency: nil, elements: []))
                 }
 
-                let offsetModulo = ((dependency.offset / 3) % 4) + 1
-                let urlRequest = URLRequest(url: URL(string: "https://reqres.in/api/users?page=\(offsetModulo)")!)
+                let page = dependency.nextPage % dependency.totalPages + 1
+                let urlRequest = URLRequest(url: URL(string: "https://reqres.in/api/users?page=\(page)")!)
 
                 return URLSession.shared.rx.data(request: urlRequest)
                     .compactMap {
                         let decoder = JSONDecoder()
                         decoder.keyDecodingStrategy = .convertFromSnakeCase
-                        return (try? decoder.decode(ReqresResponse.self, from: $0).data).map {
-                            let newOffset = dependency.offset + $0.count
+                        return (try? decoder.decode(ReqresResponse.self, from: $0)).map {
                             return Page(
                                 nextDependency: .init(
-                                    offset: newOffset,
-                                    limit: dependency.limit
-                                )
-                            , elements: $0)
+                                    nextPage: dependency.nextPage + 1,
+                                    limit: dependency.limit,
+                                    totalPages: $0.totalPages
+                                ),
+                                elements: $0.data.map { .init(title: $0.firstName, subtitle: $0.lastName) }
+                            )
                         }
                     }
             }
-            .map {
-                $0.map { .init(title: $0.firstName, subtitle: $0.lastName) }
-            }
+        }
+        .map {
+            .init(isLoading: $0.isLoading, error: $0.error, elements: $0.elements)
         }
     }
 }
